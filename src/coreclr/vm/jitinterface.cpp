@@ -12977,6 +12977,11 @@ static bool isJitted(MethodDesc* ftnDesc, const char* ftnName)
         "FilterPreCalculate",
         "FindValue",
         "GetByteCountCommon",
+        "ReverseEndianness",
+        "DecodeByte",
+        "Memmove",
+        "Log2SoftwareFallback",
+        "CountHexDigits",
     };
 
     // 2D array for class name and function name combinations to exclude from JIT compilation

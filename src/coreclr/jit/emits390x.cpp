@@ -5794,12 +5794,6 @@ void emitter::emitIns_R_R_R(instruction     ins,
         case INS_ncrk:
         case INS_nork:
         case INS_nogrk:
-        case INS_rll:
-        case INS_rllg:
-        case INS_sllk:
-        case INS_srak:
-        case INS_srlk:
-        case INS_srlg:
 
 #if 0
         case INS_bic:
@@ -5836,6 +5830,20 @@ void emitter::emitIns_R_R_R(instruction     ins,
 #endif
             emitIns_R_R_R_I(ins, attr, reg1, reg2, reg3, 0, INS_OPTS_NONE);
             return;
+
+        // Shift/rotate by a register count. INS_OPTS_LSL marks "count is in reg3",
+        // so emitOutputInstr encodes reg3 as the RSY-a base register (B2) instead of dropping it.
+        case INS_rll:
+        case INS_rllg:
+        case INS_sllk:
+        case INS_sllg:
+        case INS_srak:
+        case INS_srag:
+        case INS_srlk:
+        case INS_srlg:
+            emitIns_R_R_R_I(ins, attr, reg1, reg2, reg3, 0, INS_OPTS_LSL);
+            return;
+
 #if 0
 
         case INS_bsl:
@@ -10757,8 +10765,16 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_srak:
         case INS_srag:
             op = emitInsCode(ins, fmt);
-            imm = emitGetInsSC(id);
-            S390_RSY_a(dst, op, id->idReg1(), id->idReg2(), REG_NA, imm & 0x3f);
+            imm = emitGetInsSC(id) & 0x3f;
+            if (insOptsLSL(id->idInsOpt()))
+            {
+                S390_RSY_a(dst, op, id->idReg1(), id->idReg2(), id->idReg3(), imm);
+            }
+            else
+            {
+                // constant count: B2 = r0, D2 = imm
+                S390_RSY_a(dst, op, id->idReg1(), id->idReg2(), REG_R0, imm);
+            }
             break;
 
         case INS_sllk:
@@ -10866,7 +10882,15 @@ size_t emitter::emitOutputInstr(insGroup* ig, instrDesc* id, BYTE** dp)
         case INS_srlg:
             op = emitInsCode(ins, fmt);
             imm = emitGetInsSC(id) & 0x3f;
-            S390_RSY_a(dst, op, id->idReg1(), id->idReg2(), REG_NA, imm & 0x3f);
+            if (insOptsLSL(id->idInsOpt()))
+            {
+                S390_RSY_a(dst, op, id->idReg1(), id->idReg2(), id->idReg3(), imm);
+            }
+            else
+            {
+                // constant count: B2 = r0, D2 = imm
+                S390_RSY_a(dst, op, id->idReg1(), id->idReg2(), REG_R0, imm);
+            }
             break;
 
         case INS_llgf:
