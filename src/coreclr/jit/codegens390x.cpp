@@ -2850,57 +2850,72 @@ void CodeGen::genCodeForMemmove(GenTreeBlk* tree)
 //
 void CodeGen::genCodeForInitBlkLoop(GenTreeBlk* initBlkNode)
 {
-
     GenTree* const dstNode = initBlkNode->Addr();
     genConsumeReg(dstNode);
     const regNumber dstReg = dstNode->GetRegNum();
 
     GenTree* const zeroNode = initBlkNode->Data();
     genConsumeReg(zeroNode);
-    const regNumber zeroReg = zeroNode->GetRegNum();
 
     if (initBlkNode->IsVolatile())
     {
-        // issue a full memory barrier before a volatile initBlock Operation
+        // Issue full memory barrier before volatile initBlock
         instGen_MemoryBarrier();
     }
 
     const unsigned size = initBlkNode->GetLayout()->GetSize();
-    assert((size >= TARGET_POINTER_SIZE) && ((size % TARGET_POINTER_SIZE) == 0));
+    assert(size > 0);
 
-    // s390x has no architectural zero register, so explicitly initialize
-    // the register assigned to the Data node.
-    GetEmitter()->emitIns_R_I(INS_lghi, EA_PTRSIZE, zeroReg, 0);
+    emitter* emit = GetEmitter();
 
-    // Zero the first pointer-sized block. This also acts as a null check.
-    GetEmitter()->emitIns_R_R_I(INS_stg, EA_PTRSIZE, zeroReg, dstReg, 0);
-
-    if (size > TARGET_POINTER_SIZE)
+    // -------------------------------------------------------------
+    // Case 1: Small/Medium block (<= 256 bytes)
+    // A single XC instruction zeros up to 256 bytes with zero loops.
+    // -------------------------------------------------------------
+    if (size <= 256)
     {
-        // Extend liveness of dstReg in case if it gets killed by the store.
-        gcInfo.gcMarkRegPtrVal(dstReg, dstNode->TypeGet());
-
-        const regNumber tempReg = internalRegisters.GetSingle(initBlkNode);
-
-        // Initialize tempReg to the address of the last pointer-sized block.
-        instGen_Set_Reg_To_Imm(EA_PTRSIZE, tempReg, size - TARGET_POINTER_SIZE);
-        GetEmitter()->emitIns_R_R_R(INS_agrk, EA_PTRSIZE, tempReg, dstReg, tempReg);
-
-        BasicBlock* loop = genCreateTempLabel();
-        genDefineTempLabel(loop);
-
-        // Zero the current pointer-sized block.
-        GetEmitter()->emitIns_R_R_I(INS_stg, EA_PTRSIZE, zeroReg, tempReg, 0);
-
-        // Move backwards by one pointer.
-        GetEmitter()->emitIns_R_I(INS_aghi, EA_PTRSIZE, tempReg, -TARGET_POINTER_SIZE);
-
-        // Stop after reaching the destination address.
-        GetEmitter()->emitIns_R_R(INS_cgr, EA_PTRSIZE, tempReg, dstReg);
-        inst_JMP(EJ_ne, loop);
-
-        gcInfo.gcMarkRegSetNpt(genRegMask(dstReg));
+        emit->emitIns_SS(INS_xc, size, dstReg, 0, dstReg, 0);
+        return;
     }
+
+    // -------------------------------------------------------------
+    // Case 2: Large block (> 256 bytes)
+    // Zero 256 bytes per iteration using XC in a loop.
+    // -------------------------------------------------------------
+    gcInfo.gcMarkRegPtrVal(dstReg, dstNode->TypeGet());
+
+    const regNumber tempReg = internalRegisters.GetSingle(initBlkNode);
+
+    // Calculate how many full 256-byte chunks and remaining bytes
+    unsigned numChunks = size / 256;
+    unsigned remainder = size % 256;
+
+    // tempReg = dstReg + (numChunks * 256) [end pointer for 256-byte chunks]
+    instGen_Set_Reg_To_Imm(EA_PTRSIZE, tempReg, numChunks * 256);
+    emit->emitIns_R_R_R(INS_agrk, EA_PTRSIZE, tempReg, dstReg, tempReg);
+
+    // We use a moving pointer in dstReg or an internal work register.
+    // Let's use internal work register to preserve dstReg if needed, or advance tempReg:
+    BasicBlock* loop = genCreateTempLabel();
+    genDefineTempLabel(loop);
+
+    // Zero 256 bytes
+    emit->emitIns_SS(INS_xc, 256, dstReg, 0, dstReg, 0);
+
+    // Advance dstReg by 256 bytes (LA dstReg, 256(dstReg))
+    emit->emitIns_R_R_I(INS_lay, EA_PTRSIZE, dstReg, dstReg, 256);
+
+    // Check if we reached end of 256-byte chunks
+    emit->emitIns_R_R(INS_cgr, EA_PTRSIZE, dstReg, tempReg);
+    inst_JMP(EJ_ne, loop);
+
+    // Zero any trailing remainder (< 256 bytes)
+    if (remainder > 0)
+    {
+        emit->emitIns_SS(INS_xc, remainder, dstReg, 0, dstReg, 0);
+    }
+
+    gcInfo.gcMarkRegSetNpt(genRegMask(dstReg));
 }
 
 
