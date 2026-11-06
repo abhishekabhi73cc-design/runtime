@@ -4733,11 +4733,11 @@ instruction CodeGen::genGetInsForOper(GenTree* treeNode)
             {
                 if ((attr == EA_8BYTE) || (attr == EA_BYREF))
                 {
-                    ins = INS_nrk;
+                    ins = INS_ngrk;
                 }
                 else
                 {
-                    ins = INS_ngrk;
+                    ins = INS_nrk;
                 }
             }
             break;

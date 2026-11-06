@@ -12979,6 +12979,7 @@ static bool isJitted(MethodDesc* ftnDesc, const char* ftnName)
         "FilterPreCalculate",
         "FindValue",
         "GetByteCountCommon",
+        "AllCharsInUInt64AreAscii",
         "NonPackedIndexOfValueType",
     };
 
