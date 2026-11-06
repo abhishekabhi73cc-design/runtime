@@ -7701,16 +7701,12 @@ void emitter::emitIns_R_S(instruction ins, emitAttr attr, regNumber reg1, int va
 
 /*****************************************************************************
  *
- *  Add an RSY-format instruction (Register-Register-Storage, 6 bytes).
- *  RSY-format: opc(8) | R1(4) | R3(4) | B2(4) | DL2(12) | DH2(8) | opc(8)
- *
- *  Arguments:
- *    ins     - instruction (e.g. INS_srlg, INS_sllg, INS_srag, INS_rllg, etc.)
- *    attr    - operand size/attribute
- *    reg1    - R1 (destination register)
- *    reg2    - R3 (source register to be shifted/stored)
- *    baseReg - B2 (shift count register or REG_R0 for immediate constant)
- *    disp    - D2 (20-bit signed long displacement / immediate shift amount)
+ *  Add an RSY-format instruction referencing two registers and a displacement / base register.
+ *  Encodes RSY-a format shift/rotate instructions (e.g. srlg, sllg, srag, rllg) where:
+ *    - reg1: Destination register (R1)
+ *    - reg2: Source register (R3)
+ *    - varx: Shift count register number (B2), or 0 for REG_R0 (immediate shift)
+ *    - offs: 20-bit signed displacement / immediate shift amount (D2)
  */
 void emitter::emitIns_R_R_S(
     instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, int varx, int offs)
