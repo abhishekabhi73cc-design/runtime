@@ -5797,6 +5797,12 @@ void emitter::emitIns_R_R_R(instruction     ins,
         case INS_ncrk:
         case INS_nork:
         case INS_nogrk:
+        case INS_rll:
+        case INS_rllg:
+        case INS_sllk:
+        case INS_srak:
+        case INS_srlk:
+        case INS_srlg:
 
 #if 0
         case INS_bic:
@@ -5833,20 +5839,6 @@ void emitter::emitIns_R_R_R(instruction     ins,
 #endif
             emitIns_R_R_R_I(ins, attr, reg1, reg2, reg3, 0, INS_OPTS_NONE);
             return;
-
-        // Shift/rotate by a register count. INS_OPTS_LSL marks "count is in reg3",
-        // so emitOutputInstr encodes reg3 as the RSY-a base register (B2) instead of dropping it.
-        case INS_rll:
-        case INS_rllg:
-        case INS_sllk:
-        case INS_sllg:
-        case INS_srak:
-        case INS_srag:
-        case INS_srlk:
-        case INS_srlg:
-            emitIns_R_R_R_I(ins, attr, reg1, reg2, reg3, 0, INS_OPTS_NONE);
-            return;
-
 #if 0
 
         case INS_bsl:
@@ -7702,6 +7694,39 @@ void emitter::emitIns_R_S(instruction ins, emitAttr attr, regNumber reg1, int va
 #ifdef DEBUG
     id->idDebugOnlyInfo()->idVarRefOffs = emitVarRefOffs;
 #endif
+
+    dispIns(id);
+    appendToCurIG(id);
+}
+
+/*****************************************************************************
+ *
+ *  Add an RSY-format instruction (Register-Register-Storage, 6 bytes).
+ *  RSY-format: opc(8) | R1(4) | R3(4) | B2(4) | DL2(12) | DH2(8) | opc(8)
+ *
+ *  Arguments:
+ *    ins     - instruction (e.g. INS_srlg, INS_sllg, INS_srag, INS_rllg, etc.)
+ *    attr    - operand size/attribute
+ *    reg1    - R1 (destination register)
+ *    reg2    - R3 (source register to be shifted/stored)
+ *    baseReg - B2 (shift count register or REG_R0 for immediate constant)
+ *    disp    - D2 (20-bit signed long displacement / immediate shift amount)
+ */
+void emitter::emitIns_R_R_S(
+    instruction ins, emitAttr attr, regNumber reg1, regNumber reg2, int varx, int offs)
+{
+    assert(isGeneralRegister(reg1));
+    assert(isGeneralRegister(reg2));
+
+    // For RSY shift/rotate operations (srlg, sllg, srag, rllg), varx is not a stack slot (0 or -1),
+    // and offs carries the displacement/shift amount.
+    instrDesc* id = emitNewInstrCns(attr, offs);
+    id->idIns(ins);
+    id->idInsFmt(IF_NONE);
+    id->idReg1(reg1);
+    id->idReg2(reg2);
+    // If varx is used to pass a register number or 0 for REG_R0:
+    id->idReg3(varx != 0 ? (regNumber)varx : REG_R0);
 
     dispIns(id);
     appendToCurIG(id);
